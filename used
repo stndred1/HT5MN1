@@ -1,0 +1,67 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline
+
+# Step 1: Load the dataset (assuming it's in CSV format)
+data = pd.read_csv(r"C:\Users\Deltaz\Downloads\horizons_results.csv")
+
+# Extract relevant columns (time, X, Y, Z)
+time = data['JDTDB']  # Julian date time
+X = data['x']  
+Y = data['y']
+Z = data['z']
+
+# Step 2: Perform cubic spline interpolation for X, Y, Z
+cs_X = CubicSpline(time, X)
+cs_Y = CubicSpline(time, Y)
+cs_Z = CubicSpline(time, Z)
+
+# Step 3: Generate new time points for interpolation
+time_new = np.linspace(min(time), max(time), num=500)
+
+# Interpolated values
+X_interp = cs_X(time_new)
+Y_interp = cs_Y(time_new)
+Z_interp = cs_Z(time_new)
+
+# Step 4: Function to create a table of cubic spline equations
+def create_spline_table(cs, label, is_derivative=False):
+    equations = []
+    for i in range(len(cs.c.T)):
+        t_i = cs.x[i]
+        t_next = cs.x[i+1]
+
+        if not is_derivative:
+            # Extract coefficients for the cubic spline (position)
+            a, b, c, d = cs.c.T[i]  # Coefficients for (t - t_i)^3, (t - t_i)^2, (t - t_i), constant
+            eq = f"({a:.2e}) * (t - {t_i:.2e})^3 + ({b:.2e}) * (t - {t_i:.2e})^2 + ({c:.2e}) * (t - {t_i:.2e}) + ({d:.2e})"
+        else:
+            # Extract coefficients for the first derivative (velocity)
+            a, b, c = cs.c.T[i]  # Coefficients for (t - t_i)^2, (t - t_i), constant
+            eq = f"({a:.1e}) * (t - {t_i:.2e})^2 + ({b:.2e}) * (t - {t_i:.2e}) + ({c:.2e})"
+        
+        equations.append([f"[{t_i:.2e}, {t_next:.2e}]", eq])
+
+    # Create a DataFrame for better table visualization
+    df = pd.DataFrame(equations, columns=['Interval', f'{label} Equation'])
+    return df
+
+# Step 5: Create and print the tables
+print("Position Equations (Cubic Spline):")
+X_position_table = create_spline_table(cs_X, 'X-position')
+Y_position_table = create_spline_table(cs_Y, 'Y-position')
+Z_position_table = create_spline_table(cs_Z, 'Z-position')
+
+print(X_position_table)
+print(Y_position_table)
+print(Z_position_table)
+
+print("\nVelocity Equations (First Derivative of Spline):")
+X_velocity_table = create_spline_table(cs_X.derivative(), 'X-velocity', is_derivative=True)
+Y_velocity_table = create_spline_table(cs_Y.derivative(), 'Y-velocity', is_derivative=True)
+Z_velocity_table = create_spline_table(cs_Z.derivative(), 'Z-velocity', is_derivative=True)
+
+print(X_velocity_table)
+print(Y_velocity_table)
+print(Z_velocity_table)
