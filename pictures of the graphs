@@ -1,0 +1,116 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline
+from matplotlib import image as mpimg
+
+# Step 1: Load the dataset (assuming it's in CSV format)
+data = pd.read_csv(r"C:\Users\Deltaz\Downloads\horizons_results.csv")
+
+# Extract relevant columns (time, X, Y, Z)
+time = data['JDTDB']  # Julian date time
+X = data['x']  
+Y = data['y']
+Z = data['z']
+
+# Step 2: Perform cubic spline interpolation for X, Y, Z
+cs_X = CubicSpline(time, X)
+cs_Y = CubicSpline(time, Y)
+cs_Z = CubicSpline(time, Z)
+
+# Step 3: Generate new time points for interpolation
+time_new = np.linspace(min(time), max(time), num=500)
+
+# Interpolated values
+X_interp = cs_X(time_new)
+Y_interp = cs_Y(time_new)
+Z_interp = cs_Z(time_new)
+
+# Step 4: Function to create a table of cubic spline equations
+def create_spline_table(cs, label, is_derivative=False):
+    equations = []
+    for i in range(len(cs.c.T)):
+        t_i = cs.x[i]
+        t_next = cs.x[i+1]
+
+        if not is_derivative:
+            # Extract coefficients for the cubic spline (position)
+            a, b, c, d = cs.c.T[i]  # Coefficients for (t - t_i)^3, (t - t_i)^2, (t - t_i), constant
+            eq = f"({a:.4e}) * (t - {t_i:.4e})^3 + ({b:.4e}) * (t - {t_i:.4e})^2 + ({c:.4e}) * (t - {t_i:.4e}) + ({d:.4e})"
+        else:
+            # Extract coefficients for the first derivative (velocity)
+            a, b, c = cs.c.T[i]  # Coefficients for (t - t_i)^2, (t - t_i), constant
+            eq = f"({a:.4e}) * (t - {t_i:.4e})^2 + ({b:.4e}) * (t - {t_i:.4e}) + ({c:.4e})"
+        
+        equations.append([f"[{t_i:.4e}, {t_next:.4e}]", eq])
+
+    # Create a DataFrame for better table visualization
+    df = pd.DataFrame(equations, columns=['Interval', f'{label} Equation'])
+    return df
+
+# Function to save and show tables as PNG images
+def save_and_show_table_as_image(df, filename, title):
+    # Save the table as a PNG image
+    fig, ax = plt.subplots(figsize=(12, 4))  # Adjust the figure size as needed
+    ax.axis('tight')
+    ax.axis('off')
+    table = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='center', loc='center')
+    table.scale(1, 2)  # Scale the table for better visibility
+    ax.set_title(title)
+    plt.savefig(filename, bbox_inches='tight', dpi=300)
+    plt.close()
+
+    # Display the saved PNG image
+    img = mpimg.imread(filename)
+    plt.figure(figsize=(8, 6))
+    plt.imshow(img)
+    plt.axis('off')  # Hide axis
+    plt.show()
+
+# Step 5: Create, save, and display the tables
+X_position_table = create_spline_table(cs_X, 'X-position')
+Y_position_table = create_spline_table(cs_Y, 'Y-position')
+Z_position_table = create_spline_table(cs_Z, 'Z-position')
+
+save_and_show_table_as_image(X_position_table, 'X_position_table.png', 'X-position Equations')
+save_and_show_table_as_image(Y_position_table, 'Y_position_table.png', 'Y-position Equations')
+save_and_show_table_as_image(Z_position_table, 'Z_position_table.png', 'Z-position Equations')
+
+X_velocity_table = create_spline_table(cs_X.derivative(), 'X-velocity', is_derivative=True)
+Y_velocity_table = create_spline_table(cs_Y.derivative(), 'Y-velocity', is_derivative=True)
+Z_velocity_table = create_spline_table(cs_Z.derivative(), 'Z-velocity', is_derivative=True)
+
+save_and_show_table_as_image(X_velocity_table, 'X_velocity_table.png', 'X-velocity Equations')
+save_and_show_table_as_image(Y_velocity_table, 'Y_velocity_table.png', 'Y-velocity Equations')
+save_and_show_table_as_image(Z_velocity_table, 'Z_velocity_table.png', 'Z-velocity Equations')
+
+# Step 6: Plot original and interpolated data for position
+plt.figure(figsize=(10, 6))
+plt.plot(time, X, 'o', label='Original X', markersize=5)
+plt.plot(time_new, X_interp, label='Interpolated X')
+plt.plot(time, Y, 'o', label='Original Y', markersize=5)
+plt.plot(time_new, Y_interp, label='Interpolated Y')
+plt.plot(time, Z, 'o', label='Original Z', markersize=5)
+plt.plot(time_new, Z_interp, label='Interpolated Z')
+plt.xlabel('Time (Julian Date)')
+plt.ylabel('Position (km)')
+plt.legend()
+plt.title('Cubic Spline Interpolation of Moon Trajectory')
+plt.show()
+
+# Step 7: Calculate first derivatives (velocities) from the cubic splines
+vel_X = cs_X.derivative()(time_new)
+vel_Y = cs_Y.derivative()(time_new)
+vel_Z = cs_Z.derivative()(time_new)
+
+# Velocity magnitude
+velocity_magnitude = np.sqrt(vel_X**2 + vel_Y**2 + vel_Z**2)
+
+# Step 8: Plot velocity over time
+plt.figure(figsize=(10, 6))
+plt.plot(time_new, velocity_magnitude, label='Velocity Magnitude (Cubic Spline)')
+plt.xlabel('Time (Julian Date)')
+plt.ylabel('Velocity (km/s)')
+plt.legend()
+plt.title('Moon Velocity over Time (Cubic Spline)')
+plt.show()
